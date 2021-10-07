@@ -1,0 +1,47 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "With -list option",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${file}",
+            "cwd": "${file}",
+            "args": ["-list","-verbose"]
+        },
+        {
+            "name": "With -driveletter option",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${file}",
+            "cwd": "${file}",
+            "args": ["-driveletter","-verbose"]
+        },{
+            "name": "With -getdrivestate option",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${file}",
+            "cwd": "${file}",
+            "args": ["-getdrivestate","-verbose"]
+        },{
+            "name": "With -getmediatype option",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${file}",
+            "cwd": "${file}",
+            "args": ["-getmediatype","-verbose"]
+        },
+        {
+            "name": "With no options",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${file}",
+            "cwd": "${file}",
+            "args": ["-verbose"]
+        }
+
+    ]
+}
