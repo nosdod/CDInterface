@@ -7,18 +7,23 @@ Example
 This will display all the options available for the script.
 
 To copy the contents of a specified directory to writeable media
+
 .\CDInterface.ps1 -writetomedia C:\Users\Mark\Documents -cdlabel MyBackup
 
 Tp get the drive letter
+
 .\CDInterface.ps1 -driveletter
 
 To get the drive status
+
 .\CDInterface.ps1 -getdrivestate
 
 Tp get the script version
+
 .\CDInterface.ps1 -version
 
 Tp list available drives
+
 .\CDInterface.ps1 -list
 
 Add the -verbose option to any command to see more info on the scripts actions
