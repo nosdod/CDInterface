@@ -1,33 +1,50 @@
-CDInterface
-This powershell script can be invoke from the command line in a Powershell session.
-No installation is required, just copy the file and run it.
+CDInterfaceModule
+This powershell script is a Powershell module. It is designed to be installed onto the target system
+before being used. It contains one exposed Powershell CmdLet - CDInterface.
 
-Example
-.\CDInterface.ps1 -help
-This will display all the options available for the script.
+It can still be invoke from the command line in a Powershell session in the following way ...
+From the directory where the file CDInterfaceModule.psm1 is located
+Import-Module .\CDInterfaceModule.psm1
+Then in the same session run
+CDInterface <arguments>
+
+To install the modules on your system, run deploy.ps1.
+This 
+1) Creates C:\Program Files\WindowsPowerShell\Modules\CDInterfaceModule\1.0.0
+2) Copies the module file into a new directory.
+3) Creates a module manifest.
+Once the module has been installed in this way, you can just invoke CDInterface from a Powershell session
+
+The examples below assumes you have either installed or imported the module
+
+To view all options available
+
+CDInterface -help
+
+This will display all the options available for the CmdLet.
 
 To copy the contents of a specified directory to writeable media
 
-.\CDInterface.ps1 -writetomedia C:\Users\Mark\Documents -cdlabel MyBackup
+CDInterface -writetomedia C:\Users\Mark\Documents -cdlabel MyBackup
 
-Tp get the drive letter
+To get the drive letter
 
-.\CDInterface.ps1 -driveletter
+CDInterface -driveletter
 
 To get the drive status
 
-.\CDInterface.ps1 -getdrivestate
+CDInterface -getdrivestate
 
-Tp get the script version
+To get the module version
 
-.\CDInterface.ps1 -version
+CDInterface -version
 
-Tp list available drives
+To list available drives
 
-.\CDInterface.ps1 -list
+CDInterface -list
 
 Add the -verbose option to any command to see more info on the scripts actions
-Other options and commands are documented in the Usage output in the help page.
+Other options and commands are documented in the help page.
 
 Mark Dodson
-07/10/2021
+11/10/2021
