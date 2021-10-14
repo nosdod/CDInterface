@@ -5,6 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "PowerShell Interactive Session",
+            "type": "PowerShell",
+            "request": "launch",
+            "cwd": ""
+        },
+    {
+        "name": "PowerShell Attach Interactive Session Runspace",
+        "type": "PowerShell",
+        "request": "attach",
+        "processId": "current"
+    },
+        {
             "name": "With -list option",
             "type": "PowerShell",
             "request": "launch",

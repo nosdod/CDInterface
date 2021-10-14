@@ -4,6 +4,127 @@ BeforeAll {
 
     # Make sure we have the local version loaded
     Import-Module $PSScriptRoot\CDInterfaceModule.psm1
+
+    # Common Mocks define here
+    class fake_Get_ChildItem {
+        [string] $Fullname = "ADirectory"
+        [int] $length = 100000000
+    }
+
+    $0discMasterMock = New-Module -AsCustomObject -ScriptBlock {
+        [int] $Count = 0
+        function Item ($ind) {
+            return ""
+        }
+        Export-ModuleMember -Variable * -Function *
+    }
+
+    $1discMasterMock = New-Module -AsCustomObject -ScriptBlock {
+        [array] $drives = @("drive0")
+        [int] $Count = 1
+        function Item ($ind) {
+            return $drives[$ind]
+        }
+        Export-ModuleMember -Variable * -Function *
+    }
+
+    # ImageStream object
+    class fake_ImageStream {
+    }
+
+    # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
+    class fake_IMAPI2_MsftDiscRecorder2 {
+        [string] $VendorId = "AVendor"
+        [string] $ProductId = "AMediaDrive"
+        [string] $VolumePaths = "D:\"
+        [void] InitializeDiscRecorder([string]$drive) {}
+        [void] AcquireExclusiveAccess([bool]$flag,[string]$ClientName) {}
+        [void] ReleaseExclusiveAccess() {}
+        [void] EjectMedia() {}
+    }
+
+    # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
+    class fake_IMAPI2_MsftDiscFormat2Data {
+        [string] $Recorder = "drive0"
+        [string] $ClientName = "AClientName"
+        [bool] $ForceMediaToBeClosed = $true
+        [int] $CurrentPhysicalMediaType = 2 # CDR
+        [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
+        [bool] $MediaHeuristicallyBlank = $true
+        [void] Write([fake_ImageStream]$ImageStream) {}
+        [int] $TotalSectorsOnMedia = 359000
+    }
+
+    class fake_IMAPI2_MsftDiscFormat2Data_CDR_NOT_BLANK {
+        [string] $Recorder = "drive0"
+        [string] $ClientName = "AClientName"
+        [bool] $ForceMediaToBeClosed = $true
+        [int] $CurrentPhysicalMediaType = 2 # CDR
+        [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
+        [bool] $MediaHeuristicallyBlank = $false
+        [void] Write([fake_ImageStream]$ImageStream) {}
+        [int] $TotalSectorsOnMedia = 359000
+    }
+
+    class fake_IMAPI2_MsftDiscFormat2Data_CDRW_NOT_BLANK {
+        [string] $Recorder = "drive0"
+        [string] $ClientName = "AClientName"
+        [bool] $ForceMediaToBeClosed = $true
+        [int] $CurrentPhysicalMediaType = 3 # CDRW
+        [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
+        [bool] $MediaHeuristicallyBlank = $false
+        [void] Write([fake_ImageStream]$ImageStream) {}
+        [int] $TotalSectorsOnMedia = 359000
+    }
+
+    class fake_IMAPI2_MsftDiscFormat2Data_CDRW {
+        [string] $Recorder = "drive0"
+        [string] $ClientName = "AClientName"
+        [bool] $ForceMediaToBeClosed = $true
+        [int] $CurrentPhysicalMediaType = 3 # CDRW
+        [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
+        [bool] $MediaHeuristicallyBlank = $true
+        [void] Write([fake_ImageStream]$ImageStream) {}
+        [int] $TotalSectorsOnMedia = 359000
+    }
+
+    # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
+    class fake_IMAPI2FS_MsftFileSystemImage_Root {
+        [void] AddTreeWithNamedStreams([string]$path,[bool] $writeflag) {}
+    }
+
+    class fake_IMAPI2FS_MsftFileSystemImage_Root_Exception {
+        [void] AddTreeWithNamedStreams([string]$path,[bool] $writeflag) { Throw } # Simulate a path not found error
+    }
+
+    class fake_IMAPI2FS_MsftFileSystemImage_ResultImage {
+        [fake_ImageStream] $ImageStream
+    }
+
+    class fake_IMAPI2FS_MsftFileSystemImage {
+        [string] $FileSystemsToCreate
+        [string] $VolumeName
+        [string] $VolumePaths
+        [fake_IMAPI2FS_MsftFileSystemImage_ResultImage] CreateResultImage() { return New-Object 'fake_IMAPI2FS_MsftFileSystemImage_ResultImage' }
+        [fake_IMAPI2FS_MsftFileSystemImage_Root] $Root
+
+        fake_IMAPI2FS_MsftFileSystemImage() {
+            $this.Root = New-Object 'fake_IMAPI2FS_MsftFileSystemImage_Root'
+        }
+    }
+
+    class fake_IMAPI2FS_MsftFileSystemImage_Exception {
+        [string] $FileSystemsToCreate
+        [string] $VolumeName
+        [string] $VolumePaths
+        [fake_IMAPI2FS_MsftFileSystemImage_ResultImage] CreateResultImage() { return New-Object 'fake_IMAPI2FS_MsftFileSystemImage_ResultImage' }
+        [fake_IMAPI2FS_MsftFileSystemImage_Root] $Root
+
+        fake_IMAPI2FS_MsftFileSystemImage() {
+            $this.Root = New-Object 'fake_IMAPI2FS_MsftFileSystemImage_Root_Exception'
+        }
+    }
+
 }
 
 Describe 'Write-Response' {
@@ -66,36 +187,47 @@ Describe 'CDInterface' {
 }
 
 Describe 'CDInterface -list' {
-    Context "A system with 2 drives" {
+    BeforeAll {
+    }
 
+    Context "A system with 2 drives" {
         It 'it should list 2 devices' {
             Mock -ModuleName CDInterfaceModule New-Object {
                 return @("drive0","drive1") # Simulate a system with 2 drives
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
+            # Mock the recorder object creation
+            Mock -ModuleName CDInterfaceModule 'New-Object' { 
+                New-Object 'fake_IMAPI2_MsftDiscRecorder2' 
+            } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscRecorder2" }
+
             $cdi = CDInterface -list
             $cdi.Count | Should -Be 2
-            $cdi[0] | Should -Be "0 drive0"
-            $cdi[1] | Should -Be "1 drive1"
+            $cdi[0] | Should -Match "0 Device.*AVendor.*AMediaDrive.*D"
+            $cdi[1] | Should -Match "1 Device.*AVendor.*AMediaDrive.*D"
         }
     }
 
     Context "A system with 1 drive" {
         It 'it should list 1 devices' {
-            Mock -ModuleName CDInterfaceModule New-Object {
-                return @("drive0") # Simulate a system with 1 drive
+            Mock -ModuleName CDInterfaceModule 'New-Object' {
+                $1discMasterMock
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
             
+            # Mock the recorder object creation
+            Mock -ModuleName CDInterfaceModule 'New-Object' { 
+                New-Object 'fake_IMAPI2_MsftDiscRecorder2' 
+            } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscRecorder2" }
+
             $cdi = CDInterface -list
-            $cdi.Count | Should -Be 1
-            $cdi | Should -Be "0 drive0"
+            $cdi | Should -Match "0 Device.*AVendor.*AMediaDrive.*D"
         }
     }
 
     Context "A system with no drives" {
         It 'Given the list parameter, it should list 0 devices' {
             Mock -ModuleName CDInterfaceModule New-Object {
-                return @() # Simulate a system with 0 drives
+                $0discMasterMock # Simulate a system with 0 drives
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
             
             $cdi = CDInterface -list
@@ -106,30 +238,11 @@ Describe 'CDInterface -list' {
 
 Describe 'CDInterface -getdrivestate -production' {
     Context "Normal behaviour for a blank CDR loaded in production on a system with 1 drive" {
-        BeforeAll {
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscRecorder2 {
-                [string] $VendorId
-                [string] $ProductId
-                [string] $VolumePaths
-                [void] InitializeDiscRecorder([string]$drive) {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscFormat2Data {
-                [string] $Recorder = "drive0"
-                [string] $ClientName = "AClientName"
-                [bool] $ForceMediaToBeClosed = $true
-                [int] $CurrentPhysicalMediaType = 2 # CDR
-                [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
-                [bool] $MediaHeuristicallyBlank = $true
-            }
-        }
 
         It 'it should show cd is blank and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {
-                return @("drive0","") # Simulate a system with 1 drive
+                $1discMasterMock # Simulate a system with 1 drive
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
             # Mock the recorder object creation
@@ -149,30 +262,11 @@ Describe 'CDInterface -getdrivestate -production' {
     }
 
     Context "Error behaviour CDR is not blank CDR in production on a system with 1 drive" {
-        BeforeAll {
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscRecorder2 {
-                [string] $VendorId
-                [string] $ProductId
-                [string] $VolumePaths
-                [void] InitializeDiscRecorder([string]$drive) {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscFormat2Data {
-                [string] $Recorder = "drive0"
-                [string] $ClientName = "AClientName"
-                [bool] $ForceMediaToBeClosed = $true
-                [int] $CurrentPhysicalMediaType = 2 # CDR
-                [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
-                [bool] $MediaHeuristicallyBlank = $false  # CDR not Blank
-            }
-        }
 
         It 'it should show cd is not blank and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {
-                return @("drive0","") # Simulate a system with 1 drive
+                $1discMasterMock # Simulate a system with 1 drive
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
             # Mock the recorder object creation
@@ -182,7 +276,7 @@ Describe 'CDInterface -getdrivestate -production' {
 
             # Mock the formatter object
             Mock -ModuleName CDInterfaceModule 'New-Object' { 
-                New-Object 'fake_IMAPI2_MsftDiscFormat2Data' 
+                New-Object 'fake_IMAPI2_MsftDiscFormat2Data_CDR_NOT_BLANK' 
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscFormat2Data" }
 
             $cdi = CDInterface -getdrivestate -production
@@ -192,30 +286,10 @@ Describe 'CDInterface -getdrivestate -production' {
     }
 
     Context "Error behaviour Media loaded is not CDR in production on a system with 1 drive" {
-        BeforeAll {
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscRecorder2 {
-                [string] $VendorId
-                [string] $ProductId
-                [string] $VolumePaths
-                [void] InitializeDiscRecorder([string]$drive) {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscFormat2Data {
-                [string] $Recorder = "drive0"
-                [string] $ClientName = "AClientName"
-                [bool] $ForceMediaToBeClosed = $true
-                [int] $CurrentPhysicalMediaType = 3 # CDRW
-                [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
-                [bool] $MediaHeuristicallyBlank = $true
-            }
-        }
-
         It 'it should show media is wrong type and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {
-                return @("drive0","") # Simulate a system with 1 drive
+                $1discMasterMock # Simulate a system with 1 drive
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
             # Mock the recorder object creation
@@ -225,7 +299,7 @@ Describe 'CDInterface -getdrivestate -production' {
 
             # Mock the formatter object
             Mock -ModuleName CDInterfaceModule 'New-Object' { 
-                New-Object 'fake_IMAPI2_MsftDiscFormat2Data' 
+                New-Object 'fake_IMAPI2_MsftDiscFormat2Data_CDRW' 
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscFormat2Data" }
 
             $cdi = CDInterface -getdrivestate -production
@@ -238,56 +312,10 @@ Describe 'CDInterface -getdrivestate -production' {
 
 Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production' {
     Context "Normal behaviour for a blank CDR loaded in production on a system with 1 drive" {
-        BeforeAll {
-            # ImageStream object
-            class fake_ImageStream {
-            }
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscRecorder2 {
-                [string] $VendorId
-                [string] $ProductId
-                [string] $VolumePaths
-                [void] InitializeDiscRecorder([string]$drive) {}
-                [void] AcquireExclusiveAccess([bool]$acquireFlag,[string]$clientName) {}
-                [void] ReleaseExclusiveAccess() {}
-                [void] EjectMedia() {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscFormat2Data {
-                [string] $Recorder = "drive0"
-                [string] $ClientName = "AClientName"
-                [bool] $ForceMediaToBeClosed = $true
-                [int] $CurrentPhysicalMediaType = 2 # CDR
-                [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
-                [bool] $MediaHeuristicallyBlank = $true
-                [void] Write([fake_ImageStream]$ImageStream) {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2FS_MsftFileSystemImage_Root {
-                [void] AddTreeWithNamedStreams([string]$path,[bool] $writeflag) {}
-            }
-            class fake_IMAPI2FS_MsftFileSystemImage_ResultImage {
-                [fake_ImageStream] $ImageStream
-            }
-            class fake_IMAPI2FS_MsftFileSystemImage {
-                [string] $FileSystemsToCreate
-                [string] $VolumeName
-                [string] $VolumePaths
-                [fake_IMAPI2FS_MsftFileSystemImage_ResultImage] CreateResultImage() { return New-Object 'fake_IMAPI2FS_MsftFileSystemImage_ResultImage' }
-                [fake_IMAPI2FS_MsftFileSystemImage_Root] $Root
-
-                fake_IMAPI2FS_MsftFileSystemImage() {
-                    $this.Root = New-Object 'fake_IMAPI2FS_MsftFileSystemImage_Root'
-                }
-            }
-        }
-
         It 'it should show that the write succeeded and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {
-                return @("drive0","") # Simulate a system with 1 drive
+                $1discMasterMock # Simulate a system with 1 drive
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
             # Mock the recorder object creation
@@ -304,6 +332,11 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production' {
             Mock -ModuleName CDInterfaceModule 'New-Object' { 
                 New-Object 'fake_IMAPI2FS_MsftFileSystemImage' 
             } -ParameterFilter { $ComObject -eq "IMAPI2FS.MsftFileSystemImage" }
+
+            # Mock the Get-ChildItem cmdlet
+            Mock -ModuleName CDInterfaceModule 'Get-ChildItem' {
+                New-Object 'fake_Get_ChildItem'
+            }
 
             $cdi = CDInterface -writetomedia "C:\Users\Mark" -cdlabel "MyBackup" -production
             $cdi.Count | Should -Be 2
@@ -314,56 +347,11 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production' {
 
 Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production -verbose' {
     Context "Verbose behaviour for a blank CDR loaded in production on a system with 1 drive" {
-        BeforeAll {
-            # ImageStream object
-            class fake_ImageStream {
-            }
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscRecorder2 {
-                [string] $VendorId
-                [string] $ProductId
-                [string] $VolumePaths
-                [void] InitializeDiscRecorder([string]$drive) {}
-                [void] AcquireExclusiveAccess([bool]$acquireFlag,[string]$clientName) {}
-                [void] ReleaseExclusiveAccess() {}
-                [void] EjectMedia() {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscFormat2Data {
-                [string] $Recorder = "drive0"
-                [string] $ClientName = "AClientName"
-                [bool] $ForceMediaToBeClosed = $true
-                [int] $CurrentPhysicalMediaType = 2 # CDR
-                [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
-                [bool] $MediaHeuristicallyBlank = $true
-                [void] Write([fake_ImageStream]$ImageStream) {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2FS_MsftFileSystemImage_Root {
-                [void] AddTreeWithNamedStreams([string]$path,[bool] $writeflag) {}
-            }
-            class fake_IMAPI2FS_MsftFileSystemImage_ResultImage {
-                [fake_ImageStream] $ImageStream
-            }
-            class fake_IMAPI2FS_MsftFileSystemImage {
-                [string] $FileSystemsToCreate
-                [string] $VolumeName
-                [string] $VolumePaths
-                [fake_IMAPI2FS_MsftFileSystemImage_ResultImage] CreateResultImage() { return New-Object 'fake_IMAPI2FS_MsftFileSystemImage_ResultImage' }
-                [fake_IMAPI2FS_MsftFileSystemImage_Root] $Root
-
-                fake_IMAPI2FS_MsftFileSystemImage() {
-                    $this.Root = New-Object 'fake_IMAPI2FS_MsftFileSystemImage_Root'
-                }
-            }
-        }
-
+    
         It 'it should show that the write succeeded and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {
-                return @("drive0","") # Simulate a system with 1 drive
+                $1discMasterMock # Simulate a system with 1 drive
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
             # Mock the recorder object creation
@@ -380,6 +368,11 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production -verbose
             Mock -ModuleName CDInterfaceModule 'New-Object' { 
                 New-Object 'fake_IMAPI2FS_MsftFileSystemImage' 
             } -ParameterFilter { $ComObject -eq "IMAPI2FS.MsftFileSystemImage" }
+
+            # Mock the Get-ChildItem cmdlet
+            Mock -ModuleName CDInterfaceModule 'Get-ChildItem' {
+                New-Object 'fake_Get_ChildItem'
+            }
 
             $cdi = CDInterface -writetomedia "C:\Users\Mark" -cdlabel "MyBackup" -production -Verbose
             $cdi.Count | Should -Be 2
@@ -390,30 +383,11 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production -verbose
 
 Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production error paths' {
     Context "Error behaviour CDR is not blank CDR in production on a system with 1 drive" {
-        BeforeAll {
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscRecorder2 {
-                [string] $VendorId
-                [string] $ProductId
-                [string] $VolumePaths
-                [void] InitializeDiscRecorder([string]$drive) {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscFormat2Data {
-                [string] $Recorder = "drive0"
-                [string] $ClientName = "AClientName"
-                [bool] $ForceMediaToBeClosed = $true
-                [int] $CurrentPhysicalMediaType = 2 # CDR
-                [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
-                [bool] $MediaHeuristicallyBlank = $false  # CDR not Blank
-            }
-        }
 
         It 'it should show cd is not blank and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {
-                return @("drive0","") # Simulate a system with 1 drive
+                $1discMasterMock # Simulate a system with 1 drive
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
             # Mock the recorder object creation
@@ -423,8 +397,13 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production error pa
 
             # Mock the formatter object
             Mock -ModuleName CDInterfaceModule 'New-Object' { 
-                New-Object 'fake_IMAPI2_MsftDiscFormat2Data' 
+                New-Object 'fake_IMAPI2_MsftDiscFormat2Data_CDR_NOT_BLANK' 
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscFormat2Data" }
+
+            # Mock the Get-ChildItem cmdlet
+            Mock -ModuleName CDInterfaceModule 'Get-ChildItem' {
+                New-Object 'fake_Get_ChildItem'
+            }
 
             $cdi = CDInterface -writetomedia "C:\Users\Mark" -cdlabel "ALabel" -production
             $cdi.Count | Should -Be 2
@@ -433,56 +412,10 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production error pa
     }
 
     Context "Specified path not found with a blank CDR loaded in production on a system with 1 drive" {
-        BeforeAll {
-            # ImageStream object
-            class fake_ImageStream {
-            }
-                # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscRecorder2 {
-                [string] $VendorId
-                [string] $ProductId
-                [string] $VolumePaths
-                [void] InitializeDiscRecorder([string]$drive) {}
-                [void] AcquireExclusiveAccess([bool]$acquireFlag,[string]$clientName) {}
-                [void] ReleaseExclusiveAccess() {}
-                [void] EjectMedia() {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscFormat2Data {
-                [string] $Recorder = "drive0"
-                [string] $ClientName = "AClientName"
-                [bool] $ForceMediaToBeClosed = $true
-                [int] $CurrentPhysicalMediaType = 2 # CDR
-                [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
-                [bool] $MediaHeuristicallyBlank = $true
-                [void] Write([fake_ImageStream]$ImageStream) {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2FS_MsftFileSystemImage_Root {
-                [void] AddTreeWithNamedStreams([string]$path,[bool] $writeflag) { Throw } # Simulate a path not found error
-            }
-            class fake_IMAPI2FS_MsftFileSystemImage_ResultImage {
-                [fake_ImageStream] $ImageStream
-            }
-            class fake_IMAPI2FS_MsftFileSystemImage {
-                [string] $FileSystemsToCreate
-                [string] $VolumeName
-                [string] $VolumePaths
-                [fake_IMAPI2FS_MsftFileSystemImage_ResultImage] CreateResultImage() { return New-Object 'fake_IMAPI2FS_MsftFileSystemImage_ResultImage' }
-                [fake_IMAPI2FS_MsftFileSystemImage_Root] $Root
-
-                fake_IMAPI2FS_MsftFileSystemImage() {
-                    $this.Root = New-Object 'fake_IMAPI2FS_MsftFileSystemImage_Root'
-                }
-            }
-        }
-
         It 'it should show that the write fails and describe why and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {
-                return @("drive0","") # Simulate a system with 1 drive
+                $1discMasterMock # Simulate a system with 1 drive
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
             # Mock the recorder object creation
@@ -500,10 +433,15 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production error pa
                 New-Object 'fake_IMAPI2FS_MsftFileSystemImage' 
             } -ParameterFilter { $ComObject -eq "IMAPI2FS.MsftFileSystemImage" }
 
+            # Mock the Get-ChildItem cmdlet
+            Mock -ModuleName CDInterfaceModule 'Get-ChildItem' {
+                Throw
+            }
+
             $cdi = CDInterface -writetomedia "Invalid" -cdlabel "MyBackup" -production
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "ERROR"
-            $cdi[1] | Should -Match "^Could not find path"
+            $cdi[1] | Should -Match "^Exception occurred accessing path"
         }
     }
 }
@@ -534,30 +472,11 @@ Describe 'CDInterface -writetomedia -production Invocation error handling' {
 
 Describe 'CDInterface -getdrivestate (Development mode))' {
     Context "Normal behaviour for a blank CDR loaded on a system with 1 drive" {
-        BeforeAll {
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscRecorder2 {
-                [string] $VendorId
-                [string] $ProductId
-                [string] $VolumePaths
-                [void] InitializeDiscRecorder([string]$drive) {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscFormat2Data {
-                [string] $Recorder = "drive0"
-                [string] $ClientName = "AClientName"
-                [bool] $ForceMediaToBeClosed = $true
-                [int] $CurrentPhysicalMediaType = 2 # CDR
-                [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
-                [bool] $MediaHeuristicallyBlank = $true
-            }
-        }
 
         It 'it should show cd is blank and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {
-                return @("drive0","") # Simulate a system with 1 drive
+                $1discMasterMock # Simulate a system with 1 drive
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
             # Mock the recorder object creation
@@ -577,30 +496,11 @@ Describe 'CDInterface -getdrivestate (Development mode))' {
     }
 
     Context "Same Normal behaviour for a blank CDRW loaded on a system with 1 drive" {
-        BeforeAll {
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscRecorder2 {
-                [string] $VendorId
-                [string] $ProductId
-                [string] $VolumePaths
-                [void] InitializeDiscRecorder([string]$drive) {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscFormat2Data {
-                [string] $Recorder = "drive0"
-                [string] $ClientName = "AClientName"
-                [bool] $ForceMediaToBeClosed = $true
-                [int] $CurrentPhysicalMediaType = 3 # CDRW
-                [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
-                [bool] $MediaHeuristicallyBlank = $true
-            }
-        }
 
         It 'it should show cd is blank and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {
-                return @("drive0","") # Simulate a system with 1 drive
+                $1discMasterMock # Simulate a system with 1 drive
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
             # Mock the recorder object creation
@@ -610,7 +510,7 @@ Describe 'CDInterface -getdrivestate (Development mode))' {
 
             # Mock the formatter object
             Mock -ModuleName CDInterfaceModule 'New-Object' { 
-                New-Object 'fake_IMAPI2_MsftDiscFormat2Data' 
+                New-Object 'fake_IMAPI2_MsftDiscFormat2Data_CDRW' 
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscFormat2Data" }
 
             $cdi = CDInterface -getdrivestate
@@ -620,30 +520,11 @@ Describe 'CDInterface -getdrivestate (Development mode))' {
     }
 
     Context "Error behaviour CDRW is not blank CDRW on a system with 1 drive" {
-        BeforeAll {
-            # We create a fake IMAPI2.MsftDiscRecorder2 object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscRecorder2 {
-                [string] $VendorId
-                [string] $ProductId
-                [string] $VolumePaths
-                [void] InitializeDiscRecorder([string]$drive) {}
-            }
-
-            # We create a fake IMAPI2.MsftDiscFormat2Data object to control its behaviour in the test
-            class fake_IMAPI2_MsftDiscFormat2Data {
-                [string] $Recorder = "drive0"
-                [string] $ClientName = "AClientName"
-                [bool] $ForceMediaToBeClosed = $true
-                [int] $CurrentPhysicalMediaType = 3 # CDRW
-                [bool] IsCurrentMediaSupported([string]$recorder) { return $true }
-                [bool] $MediaHeuristicallyBlank = $false  # CDRW not Blank
-            }
-        }
 
         It 'it should show cd is not blank and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {
-                return @("drive0","") # Simulate a system with 1 drive
+                $1discMasterMock # Simulate a system with 1 drive
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscMaster2" }
 
             # Mock the recorder object creation
@@ -653,7 +534,7 @@ Describe 'CDInterface -getdrivestate (Development mode))' {
 
             # Mock the formatter object
             Mock -ModuleName CDInterfaceModule 'New-Object' { 
-                New-Object 'fake_IMAPI2_MsftDiscFormat2Data' 
+                New-Object 'fake_IMAPI2_MsftDiscFormat2Data_CDRW_NOT_BLANK' 
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscFormat2Data" }
 
             $cdi = CDInterface -getdrivestate

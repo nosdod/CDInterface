@@ -1,28 +1,30 @@
 function Get-Usage() {
-    Write-Output "Usage - CDInterface sourcePath [commands|options]"
+    Write-Output "Usage - CDInterface [commands|options]"
     Write-Output "Examples"
     Write-Output "Write the contents of a directory to current media"
-    Write-Output ""
     Write-Output "CDInterface -writetomedia C:\Users\MyUser -cdlabel MyUserBackup"
     Write-Output ""
-    Write-Output "Options"
-    Write-Output "-Verbose - Provide more feedback on script actions"
-    Write-Output "-cdlabel <label> - Specify label to apply to media"
-    Write-Output "-debuglevel <level> - Output diagnostic information. Level = 0 or 10"
-    Write-Output "-production - Run in Production mode (CD-RWs not allowed)"
-    Write-Output "-noCloseMedia - Do not close the media after writing"
-    Write-Output "-recorderIndex <index> - Use the specified device (index is obtained from -list)"
-    Write-Output "Commands"
+    Write-Output "Actions"
+    Write-Output "-------"
     Write-Output "-driveletter - Display the writers drive letter"
     Write-Output "-getdrivestate - Display status of the current media"
     Write-Output "-getmediatype - Displays the type of media in the recorder"
-    Write-Output "-mediatyperequired <media type> - Specify the type of media to be used in production mode"
     Write-Output "-getmediatypelist - Display the media types available"
     Write-Output "-help - Display this text"
     Write-Output "-list - Display a list of writeable drives"
     Write-Output "-writetomedia <sourcePath> - Write specified directory contents to media"
     Write-Output "-version - Display the product version number"
     Write-Output "-ejecttray - Eject the media from the drive"
+    Write-Output ""
+    Write-Output "Options"
+    Write-Output "-------"
+    Write-Output "-Verbose - Provide more feedback on script actions"
+    Write-Output "-cdlabel <label> - Specify label to apply to media"
+    Write-Output "-production - Run in Production mode (CD-RWs not allowed)"
+    Write-Output "-noCloseMedia - Do not close the media after writing"
+    Write-Output "-noEjectAfterWrite - Do not eject the media after a write operation"
+    Write-Output "-recorderIndex <index> - Use the specified device (index is obtained from -list)"
+    Write-Output "-mediatyperequired <media type> - Specify the type of media to be used in production mode"
 }
 
 # Respond to the caller
@@ -39,10 +41,14 @@ function Write-Response() {
     )
     if ( $failure ) {
         Write-Output "ERROR"
-        Write-Output $message
+        if ( -Not $onlysingleline ) {
+            Write-Output $message
+        }
     } elseif ( $success ){
         Write-Output $response
-        Write-Output $message
+        if ( -Not $onlysingleline ) {
+            Write-Output $message
+        }
     }
 }
 
@@ -52,28 +58,26 @@ function Get-Version() {
 
 function CDInterface() {
     [CmdletBinding()] param(
-        [string]$writetomedia, 
-        [string]$cdlabel,
-        $recorderIndex = 0, 
-        $mediaTypeRequired = 2,
-        [switch]$noCloseMedia = $false,
+        # Actions
         [switch]$list = $false,
         [switch]$driveletter = $false,
+        [switch]$ejecttray = $false,
         [switch]$getdrivestate = $false,
         [switch]$getmediatype = $false,
         [switch]$getmediatypelist = $false,
-        [switch]$production = $false,
         [switch]$help = $false,
         [switch]$version = $false,
-        [switch]$ejecttray = $false,
+        [string]$writetomedia, 
+        # Options
+        [int]$recorderIndex, 
+        [int]$mediaTypeRequired,
+        [switch]$noCloseMedia = $false,
+        [switch]$noEjectMediaAfterWrite = $false,
+        [string]$cdlabel,
+        [switch]$production = $false,
+        [switch]$onlysingleline = $false,
         $debuglevel = -1
     )
-
-    # Display version number
-    if ( $version ) {
-        $version = Get-Version
-        Write-Response -success -message "Development release for initial testing" -response $version
-    }
 
     $MediaTypeStrings = @(
         "IMAPI_MEDIA_TYPE_UNKNOWN",
@@ -99,11 +103,28 @@ function CDInterface() {
         "IMAPI_MEDIA_TYPE_MAX"
     )
 
-    if ( $help ) {
+    $SettingsObject = Get-Content -Path $PSScriptRoot/CDInterfaceModuleSettings.json | ConvertFrom-Json
+
+    # Constants
+    $sizeOfSector = $settingsObject.sizeofSector
+
+    # Use defaults if not specified on command line
+    if ( -Not $recorderIndex ) {
+        $recorderIndex = $SettingsObject.recorderIndex
+    }
+
+    if ( -Not $mediaTypeRequired ) {
+        $mediaTypeRequired = $SettingsObject.mediaTypeForProduction
+    }
+
+    # Check that an Action has been specified
+    if ( -Not ( $writetomedia -Or $list -Or $help -Or $version -Or $driveletter -Or $getdrivestate -Or $getmediatype -Or $getmediatypelist -Or $ejecttray) ){
+        Write-Response -failure -message "No Action specified"
         Get-Usage
         return
     }
 
+    # -cdlabel is mandatory if -writetomedia is specified
     if ( $writetomedia ) {
         if ( -Not $cdlabel ) {
             Write-Response -failure -message "-cdlabel option required with command -writetomedia"
@@ -111,18 +132,17 @@ function CDInterface() {
         }
     }
 
-    if ( -Not ( $writetomedia -Or $list -Or $help -Or $driveletter -Or $getdrivestate -Or $getmediatype -Or $getmediatypelist -Or $ejecttray) ){
-        Write-Response -failure -message "No command specified"
-        Get-Usage
+    # Display version
+    if ( $version ) {
+        $ver = Get-Version
+        Write-Response -success -message "Development release for initial testing" -response $ver
         return
     }
 
-    $ok = $true
-
-    # Collect options together
-    $forceMediaToBeClosed = $true
-    if ( $noCloseMedia ) {
-        $forceMediaToBeClosed = $false
+    # Display help page
+    if ( $help ) {
+        Get-Usage
+        return
     }
 
     # Display media types this script knows about
@@ -141,19 +161,22 @@ function CDInterface() {
     if ( $list ) {
         Write-Verbose -Message "Number of recorders = $($dm.Count)"
         if ( $dm.Count -gt 1 ) {
-            Write-Verbose -Message "The first drive is used by default, specify the -recorder option to use a different device"
+            Write-Verbose -Message "The first drive is used by default, specify the -recorderIndex option to use a different device"
         }
 
         if ( $dm.Count -ge 1 ) {
             $counter = 0
             foreach ($writer in $dm) {
-                Write-Output "$counter $writer"
+                $recorder = New-Object -ComObject "IMAPI2.MsftDiscRecorder2"
+                $recorder.InitializeDiscRecorder($dm.Item($counter))
+                Write-Output "$counter Device - Vendor ID = $($recorder.VendorId), Product ID = $($recorder.ProductId) mounted on $($recorder.VolumePathNames)"
+                Write-Verbose "Full description $writer"
                 $counter++
             }
         }
         return
     }
-
+    
     # Is there a writeable drive(s) available ?
     if ( $dm.Count -eq 0 ) {
         Write-Response -failure -message "No Writeable drives available"
@@ -165,7 +188,7 @@ function CDInterface() {
         Write-Response -failure -message "Specified recorder, $recorderIndex is not present. You have $($dm.Count) recorders"
         return
     }
-
+    
     # Initialize the recorder:
     $recorder = New-Object -ComObject "IMAPI2.MsftDiscRecorder2"
 
@@ -189,6 +212,12 @@ function CDInterface() {
         return
     }
 
+    # Check for close media override
+    $forceMediaToBeClosed = $true
+    if ( $noCloseMedia ) {
+        $forceMediaToBeClosed = $false
+    }
+
     # Use formatter to permform media actions:
     $df2d = New-Object -ComObject IMAPI2.MsftDiscFormat2Data
     $df2d.Recorder = $recorder
@@ -197,7 +226,11 @@ function CDInterface() {
 
     # What type of media is in the drive ?
     if ( $getmediatype ) {
-        Write-Response -success -message $MediaTypeStrings[$df2d.CurrentPhysicalMediaType] -response $($df2d.CurrentPhysicalMediaType)
+        if ( $df2d.CurrentPhysicalMediaType ) {
+            Write-Response -success -message $MediaTypeStrings[$df2d.CurrentPhysicalMediaType] -response $($df2d.CurrentPhysicalMediaType)
+        } else {
+            Write-Response -failure -message "No Media loaded"
+        }
         return
     }
 
@@ -208,12 +241,7 @@ function CDInterface() {
             Write-Response -failure -message "No Media is loaded"
         }
         return
-    } else {
-        if ( $getmediatype ) {
-            Write-Response -success -message $MediaTypeStrings[$df2d.CurrentPhysicalMediaType] -response $df2d.CurrentPhysicalMediaType
-            return
-        }
-    }
+    } 
 
     # Is there a writeable disc in the drive ?
     if ( -Not $df2d.IsCurrentMediaSupported($recorder) ) {
@@ -239,6 +267,7 @@ function CDInterface() {
     if ( $df2d.MediaHeuristicallyBlank ) { # Note a quick erased CD-RW is not physically blank!
         if ( $getdrivestate ) {
             Write-Response -success -message "Blank Media Loaded" -response "BLANK_CD"
+            Write-Verbose -Message "PhysicallyBlank = $($df2d.MediaPhysicallyBlank)"
             return
         }
     } else {
@@ -250,10 +279,10 @@ function CDInterface() {
         if ( -Not $production ) {
             Write-Verbose -Message "Use erase option on RW media first"
         }
-        $ok = $false
+        return
     }
 
-    if ( $ok -And $writetomedia ) {
+    if ( $writetomedia ) {
         # Create the in memory disc image:
         $fsi = New-Object -ComObject "IMAPI2FS.MsftFileSystemImage"
 
@@ -261,34 +290,60 @@ function CDInterface() {
 
         $fsi.VolumeName = $cdlabel
 
+        # Check the given source location is accessible
+        try {
+            $dirToWrite = Get-ChildItem $writetomedia -ErrorAction Stop
+        } catch {
+            Write-Response -failure -message "Exception occurred accessing path $writetomedia : $PSItem"
+            return
+        }
+
+        try {
+            # Check the size of the files specified
+            $sizeOfFilesToWrite = Get-ChildItem $writetomedia -recurse -ErrorAction Stop | Measure-Object -property length -sum
+        } catch {
+            Write-Response -failure -message "Exception occurred accessing items in path $writetomedia : $PSItem"
+            return
+        }
+
+        Write-Verbose -Message "Size of files in $writetomedia is $("{0:N2} MB" -f ($sizeOfFilesToWrite.Sum/1MB))"
+
+        $spaceOnMedia = $df2d.TotalSectorsOnMedia * $sizeOfSector
+        if ( $sizeOfFilesToWrite.Sum -gt $spaceOnMedia ) {
+            Write-Response -failure -message "The path $writetomedia contains too much data for this media : $("{0:N2} MB" -f ($sizeOfFilesToWrite.Sum/1MB))"
+            return
+        }
+
         # Try to add the specified directory to the in memory file system
         Write-Verbose -Message "Adding contents of $writetomedia to burn image ..."
         try {
             $fsi.Root.AddTreeWithNamedStreams($writetomedia, $false)
         } catch {
-            Write-Response -failure -message "Could not find path $writetomedia : $PSItem"
-            $ok = $false
+            Write-Response -failure -message "Error creating file system image for path $writetomedia : $PSItem"
+            return
         }
 
-        if ( $ok ) {
-            Write-Verbose -Message "Creating iso disc image in memory ... "
-            $resultimage = $fsi.CreateResultImage()
+        Write-Verbose -Message "Creating iso disc image in memory ... "
+        $resultimage = $fsi.CreateResultImage()
 
-            $resultStream = $resultimage.ImageStream
+        $resultStream = $resultimage.ImageStream
 
-            try {
-                Write-Verbose -Message "Acquiring exclusive access to recorder ... "
-                $recorder.AcquireExclusiveAccess($false,$df2d.ClientName);
-                Write-Verbose -Message "Now burning the image ... "
-                $df2d.Write($resultStream)
+        try {
+            Write-Verbose -Message "Acquiring exclusive access to recorder ... "
+            $recorder.AcquireExclusiveAccess($false,$df2d.ClientName);
+            Write-Verbose -Message "Now burning the image ... "
+            $df2d.Write($resultStream)
+            # Default behaviour is to eject the media after a write operation,
+            # -noejectmediaafterwrite suppresses this action
+            if ( -Not $noEjectMediaAfterWrite ) {
                 Write-Verbose -Message "Ejecting the media ... "
                 $recorder.EjectMedia()
-                Write-Verbose -Message "Releasing exclusive access to recorder ... "
-                $recorder.ReleaseExclusiveAccess()
-                Write-Response -success -message "Media writing complete" -response "WRITE_SUCCESS"
-            } catch {
-                Write-Response -failure -message "Disc burning failed"
             }
+            Write-Verbose -Message "Releasing exclusive access to recorder ... "
+            $recorder.ReleaseExclusiveAccess()
+            Write-Response -success -message "Media writing complete" -response "WRITE_SUCCESS"
+        } catch {
+            Write-Response -failure -message "Disc burning failed : $PSItem"
         }
     }
 }
