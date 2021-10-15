@@ -53,7 +53,7 @@ function Write-Response() {
 }
 
 function Get-Version() {
-    return "1.0.0-DEBUG"
+    return "1.0.1-DEBUG"
 }
 
 function CDInterface() {
