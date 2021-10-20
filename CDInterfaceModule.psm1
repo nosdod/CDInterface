@@ -20,7 +20,6 @@ function Get-Usage() {
     Write-Output "-------"
     Write-Output "-Verbose - Provide more feedback on script actions"
     Write-Output "-cdlabel <label> - Specify label to apply to media"
-    Write-Output "-production - Run in Production mode (CD-RWs not allowed)"
     Write-Output "-noCloseMedia - Do not close the media after writing"
     Write-Output "-noEjectAfterWrite - Do not eject the media after a write operation"
     Write-Output "-recorderIndex <index> - Use the specified device (index is obtained from -list)"
@@ -53,7 +52,7 @@ function Write-Response() {
 }
 
 function Get-Version() {
-    return "1.0.1-DEBUG"
+    return "1.0.2-DEBUG"
 }
 
 function CDInterface() {
@@ -74,7 +73,6 @@ function CDInterface() {
         [switch]$noCloseMedia = $false,
         [switch]$noEjectMediaAfterWrite = $false,
         [string]$cdlabel,
-        [switch]$production = $false,
         [switch]$onlysingleline = $false,
         $debuglevel = -1
     )
@@ -116,6 +114,9 @@ function CDInterface() {
     if ( -Not $mediaTypeRequired ) {
         $mediaTypeRequired = $SettingsObject.mediaTypeForProduction
     }
+
+    # Production mode always defined in settings
+    $production = $SettingsObject.production
 
     # Check that an Action has been specified
     if ( -Not ( $writetomedia -Or $list -Or $help -Or $version -Or $driveletter -Or $getdrivestate -Or $getmediatype -Or $getmediatypelist -Or $ejecttray) ){

@@ -236,7 +236,23 @@ Describe 'CDInterface -list' {
     }
 }
 
-Describe 'CDInterface -getdrivestate -production' {
+Describe 'CDInterface -getdrivestate PRODUCTION' {
+    BeforeAll {
+        # Mock the settings file - setting production mode
+        Mock -ModuleName CDInterfaceModule Get-Content {
+            $settings = 
+                        @' 
+                            {
+                                "sizeOfSector" : 1800,
+                                "driveDefault" : 0,
+                                "mediaTypeForProduction" : 2,
+                                "production" : true
+                            }
+'@ | Set-Content -Path TestDrive:\settings.json
+            return Get-Content -Path TestDrive:\settings.json
+        }
+    }
+
     Context "Normal behaviour for a blank CDR loaded in production on a system with 1 drive" {
 
         It 'it should show cd is blank and output 2 lines' {
@@ -255,7 +271,7 @@ Describe 'CDInterface -getdrivestate -production' {
                 New-Object 'fake_IMAPI2_MsftDiscFormat2Data' 
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscFormat2Data" }
 
-            $cdi = CDInterface -getdrivestate -production
+            $cdi = CDInterface -getdrivestate
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "BLANK_CD"
         }
@@ -279,7 +295,7 @@ Describe 'CDInterface -getdrivestate -production' {
                 New-Object 'fake_IMAPI2_MsftDiscFormat2Data_CDR_NOT_BLANK' 
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscFormat2Data" }
 
-            $cdi = CDInterface -getdrivestate -production
+            $cdi = CDInterface -getdrivestate
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "NON_WRITEABLE_DISC"
         }
@@ -302,15 +318,30 @@ Describe 'CDInterface -getdrivestate -production' {
                 New-Object 'fake_IMAPI2_MsftDiscFormat2Data_CDRW' 
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscFormat2Data" }
 
-            $cdi = CDInterface -getdrivestate -production
+            $cdi = CDInterface -getdrivestate
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "INVALID_MEDIA"
         }
     }
-
 }
 
-Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production' {
+Describe 'CDInterface -writetomedia <path> -cdlabel <label> PRODUCTION' {
+    BeforeAll {
+        # Mock the settings file - setting production mode
+        Mock -ModuleName CDInterfaceModule Get-Content {
+            $settings = 
+                        @' 
+                            {
+                                "sizeOfSector" : 1800,
+                                "driveDefault" : 0,
+                                "mediaTypeForProduction" : 2,
+                                "production" : true
+                            }
+'@ | Set-Content -Path TestDrive:\settings.json
+            return Get-Content -Path TestDrive:\settings.json
+        }
+    }
+
     Context "Normal behaviour for a blank CDR loaded in production on a system with 1 drive" {
         It 'it should show that the write succeeded and output 2 lines' {
             # Mock the get Drives object creation
@@ -338,7 +369,7 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production' {
                 New-Object 'fake_Get_ChildItem'
             }
 
-            $cdi = CDInterface -writetomedia "C:\Users\Mark" -cdlabel "MyBackup" -production
+            $cdi = CDInterface -writetomedia "C:\Users\Mark" -cdlabel "MyBackup"
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "WRITE_SUCCESS"
         }
@@ -346,6 +377,22 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production' {
 }
 
 Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production -verbose' {
+    BeforeAll {
+        # Mock the settings file - setting production mode
+        Mock -ModuleName CDInterfaceModule Get-Content {
+            $settings = 
+                        @' 
+                            {
+                                "sizeOfSector" : 1800,
+                                "driveDefault" : 0,
+                                "mediaTypeForProduction" : 2,
+                                "production" : true
+                            }
+'@ | Set-Content -Path TestDrive:\settings.json
+            return Get-Content -Path TestDrive:\settings.json
+        }
+    }
+
     Context "Verbose behaviour for a blank CDR loaded in production on a system with 1 drive" {
     
         It 'it should show that the write succeeded and output 2 lines' {
@@ -374,14 +421,30 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production -verbose
                 New-Object 'fake_Get_ChildItem'
             }
 
-            $cdi = CDInterface -writetomedia "C:\Users\Mark" -cdlabel "MyBackup" -production -Verbose
+            $cdi = CDInterface -writetomedia "C:\Users\Mark" -cdlabel "MyBackup" -Verbose
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "WRITE_SUCCESS"
         }
     }
 }
 
-Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production error paths' {
+Describe 'CDInterface -writetomedia <path> -cdlabel <label> PRODUCTION error paths' {
+    BeforeAll {
+        # Mock the settings file - setting production mode
+        Mock -ModuleName CDInterfaceModule Get-Content {
+            $settings = 
+                        @' 
+                            {
+                                "sizeOfSector" : 1800,
+                                "driveDefault" : 0,
+                                "mediaTypeForProduction" : 2,
+                                "production" : true
+                            }
+'@ | Set-Content -Path TestDrive:\settings.json
+            return Get-Content -Path TestDrive:\settings.json
+        }
+    }
+
     Context "Error behaviour CDR is not blank CDR in production on a system with 1 drive" {
 
         It 'it should show cd is not blank and output 2 lines' {
@@ -405,7 +468,7 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production error pa
                 New-Object 'fake_Get_ChildItem'
             }
 
-            $cdi = CDInterface -writetomedia "C:\Users\Mark" -cdlabel "ALabel" -production
+            $cdi = CDInterface -writetomedia "C:\Users\Mark" -cdlabel "ALabel"
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "ERROR"
         }
@@ -438,7 +501,7 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production error pa
                 Throw
             }
 
-            $cdi = CDInterface -writetomedia "Invalid" -cdlabel "MyBackup" -production
+            $cdi = CDInterface -writetomedia "Invalid" -cdlabel "MyBackup"
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "ERROR"
             $cdi[1] | Should -Match "^Exception occurred accessing path"
@@ -446,11 +509,26 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production error pa
     }
 }
 
-Describe 'CDInterface -writetomedia -production Invocation error handling' {
+Describe 'CDInterface -writetomedia PRODUCTION Invocation error handling' {
+    BeforeAll {
+        # Mock the settings file - setting production mode
+        Mock -ModuleName CDInterfaceModule Get-Content {
+            $settings = 
+                        @' 
+                            {
+                                "sizeOfSector" : 1800,
+                                "driveDefault" : 0,
+                                "mediaTypeForProduction" : 2,
+                                "production" : true
+                            }
+'@ | Set-Content -Path TestDrive:\settings.json
+            return Get-Content -Path TestDrive:\settings.json
+        }
+    }
 
     Context "Error behaviour for missing cdlabel parameter in production on a system with 1 drive" {
         It 'it should show that the write failed and output 2 lines' {
-            $cdi = CDInterface -writetomedia "C:\Users\Mark" -production
+            $cdi = CDInterface -writetomedia "C:\Users\Mark"
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "ERROR"
         }
@@ -459,18 +537,34 @@ Describe 'CDInterface -writetomedia -production Invocation error handling' {
     # Some of the parameter handling is currently done by Powershell
     Context "Error behaviour for missing value on cdlabel parameter in production on a system with 1 drive" {
         It 'script terminates with explanatory text generated by Powershell' {
-            { CDInterface -writetomedia "C:\Users\Mark" -cdlabel -production } | Should -Throw
+            { CDInterface -writetomedia "C:\Users\Mark" -cdlabel } | Should -Throw
         }
     }
 
     Context "Error behaviour for missing value on writetomedia parameter in production on a system with 1 drive" {
         It 'script terminates with explanatory text generated by Powershell' {
-            { CDInterface -writetomedia -production } | Should -Throw
+            { CDInterface -writetomedia } | Should -Throw
         }
     }
 }
 
 Describe 'CDInterface -getdrivestate (Development mode))' {
+    BeforeAll {
+        # Mock the settings file - setting non-production mode
+        Mock -ModuleName CDInterfaceModule Get-Content {
+            $settings = 
+                        @' 
+                            {
+                                "sizeOfSector" : 1800,
+                                "driveDefault" : 0,
+                                "mediaTypeForProduction" : 2,
+                                "production" : false
+                            }
+'@ | Set-Content -Path TestDrive:\settings.json
+            return Get-Content -Path TestDrive:\settings.json
+        }
+    }
+
     Context "Normal behaviour for a blank CDR loaded on a system with 1 drive" {
 
         It 'it should show cd is blank and output 2 lines' {

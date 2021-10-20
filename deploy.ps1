@@ -5,7 +5,7 @@
     [switch]$cleanonly = $false 
 )
 
-$ver='1.0.0'
+$ver='1.0.2'
 $dest="$env:ProgramFiles\WindowsPowerShell\Modules\CDInterfaceModule"
 $location="$dest\$ver"
 
