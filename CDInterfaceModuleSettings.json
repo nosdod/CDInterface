@@ -1,5 +1,6 @@
 {
     "sizeOfSector" : 1800,
     "driveDefault" : 0,
-    "mediaTypeForProduction" : 2
+    "mediaTypeForProduction" : 2,
+    "production" : false
 }
