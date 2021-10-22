@@ -124,7 +124,6 @@ BeforeAll {
             $this.Root = New-Object 'fake_IMAPI2FS_MsftFileSystemImage_Root_Exception'
         }
     }
-
 }
 
 Describe 'Write-Response' {
@@ -180,6 +179,24 @@ Describe 'Get-Version' {
 }
 
 Describe 'CDInterface' {
+    BeforeAll {
+        $productionSettings = 
+        @' 
+            {
+                "sizeOfSector" : 1800,
+                "recorderIndex" : 0,
+                "mediaTypeForProduction" : 2,
+                "production" : true,
+                "noCloseMedia": false,
+                "noEjectMediaAfterWrite" : false
+            }
+'@ | Set-Content -Path TestDrive:\productionSettings.json
+
+        Mock -ModuleName CDInterfaceModule 'Get-Content' {
+            return Get-Content -Path TestDrive:\productionSettings.json
+        }
+    }
+
     It 'Given no parameters, it outputs usage text' {
         $cdi = CDInterface
         $cdi.Count | Should -Not -Be 0
@@ -188,6 +205,21 @@ Describe 'CDInterface' {
 
 Describe 'CDInterface -list' {
     BeforeAll {
+        $productionSettings = 
+        @' 
+            {
+                "sizeOfSector" : 1800,
+                "recorderIndex" : 0,
+                "mediaTypeForProduction" : 2,
+                "production" : true,
+                "noCloseMedia": false,
+                "noEjectMediaAfterWrite" : false
+            }
+'@ | Set-Content -Path TestDrive:\productionSettings.json
+
+        Mock -ModuleName CDInterfaceModule 'Get-Content' {
+            return Get-Content -Path TestDrive:\productionSettings.json
+        }
     }
 
     Context "A system with 2 drives" {
@@ -238,18 +270,19 @@ Describe 'CDInterface -list' {
 
 Describe 'CDInterface -getdrivestate PRODUCTION' {
     BeforeAll {
-        # Mock the settings file - setting production mode
+        $productionSettings = 
+        @' 
+            {
+                "recorderIndex" : 0,
+                "mediaTypeForProduction" : 2,
+                "production" : true,
+                "noCloseMedia": false,
+                "noEjectMediaAfterWrite" : false
+            }
+'@ | Set-Content -Path TestDrive:\productionSettings.json
+
         Mock -ModuleName CDInterfaceModule Get-Content {
-            $settings = 
-                        @' 
-                            {
-                                "sizeOfSector" : 1800,
-                                "driveDefault" : 0,
-                                "mediaTypeForProduction" : 2,
-                                "production" : true
-                            }
-'@ | Set-Content -Path TestDrive:\settings.json
-            return Get-Content -Path TestDrive:\settings.json
+            return Get-Content -Path TestDrive:\productionSettings.json
         }
     }
 
@@ -327,18 +360,20 @@ Describe 'CDInterface -getdrivestate PRODUCTION' {
 
 Describe 'CDInterface -writetomedia <path> -cdlabel <label> PRODUCTION' {
     BeforeAll {
-        # Mock the settings file - setting production mode
-        Mock -ModuleName CDInterfaceModule Get-Content {
-            $settings = 
-                        @' 
-                            {
-                                "sizeOfSector" : 1800,
-                                "driveDefault" : 0,
-                                "mediaTypeForProduction" : 2,
-                                "production" : true
-                            }
-'@ | Set-Content -Path TestDrive:\settings.json
-            return Get-Content -Path TestDrive:\settings.json
+        $productionSettings = 
+        @' 
+            {
+                "sizeOfSector" : 1800,
+                "recorderIndex" : 0,
+                "mediaTypeForProduction" : 2,
+                "production" : true,
+                "noCloseMedia": false,
+                "noEjectMediaAfterWrite" : false
+            }
+'@ | Set-Content -Path TestDrive:\productionSettings.json
+
+        Mock -ModuleName CDInterfaceModule 'Get-Content' {
+            return Get-Content -Path TestDrive:\productionSettings.json
         }
     }
 
@@ -378,18 +413,20 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> PRODUCTION' {
 
 Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production -verbose' {
     BeforeAll {
-        # Mock the settings file - setting production mode
+        $productionSettings = 
+        @' 
+            {
+                "sizeOfSector" : 1800,
+                "recorderIndex" : 0,
+                "mediaTypeForProduction" : 2,
+                "production" : true,
+                "noCloseMedia": false,
+                "noEjectMediaAfterWrite" : false
+            }
+'@ | Set-Content -Path TestDrive:\productionSettings.json
+
         Mock -ModuleName CDInterfaceModule Get-Content {
-            $settings = 
-                        @' 
-                            {
-                                "sizeOfSector" : 1800,
-                                "driveDefault" : 0,
-                                "mediaTypeForProduction" : 2,
-                                "production" : true
-                            }
-'@ | Set-Content -Path TestDrive:\settings.json
-            return Get-Content -Path TestDrive:\settings.json
+            return Get-Content -Path TestDrive:\productionSettings.json
         }
     }
 
@@ -430,18 +467,20 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production -verbose
 
 Describe 'CDInterface -writetomedia <path> -cdlabel <label> PRODUCTION error paths' {
     BeforeAll {
-        # Mock the settings file - setting production mode
-        Mock -ModuleName CDInterfaceModule Get-Content {
-            $settings = 
-                        @' 
-                            {
-                                "sizeOfSector" : 1800,
-                                "driveDefault" : 0,
-                                "mediaTypeForProduction" : 2,
-                                "production" : true
-                            }
-'@ | Set-Content -Path TestDrive:\settings.json
-            return Get-Content -Path TestDrive:\settings.json
+        $productionSettings = 
+        @' 
+            {
+                "sizeOfSector" : 1800,
+                "recorderIndex" : 0,
+                "mediaTypeForProduction" : 2,
+                "production" : true,
+                "noCloseMedia": false,
+                "noEjectMediaAfterWrite" : false
+            }
+'@ | Set-Content -Path TestDrive:\productionSettings.json
+
+        Mock -ModuleName CDInterfaceModule 'Get-Content' {
+            return Get-Content -Path TestDrive:\productionSettings.json
         }
     }
 
@@ -511,18 +550,20 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> PRODUCTION error pat
 
 Describe 'CDInterface -writetomedia PRODUCTION Invocation error handling' {
     BeforeAll {
-        # Mock the settings file - setting production mode
-        Mock -ModuleName CDInterfaceModule Get-Content {
-            $settings = 
-                        @' 
-                            {
-                                "sizeOfSector" : 1800,
-                                "driveDefault" : 0,
-                                "mediaTypeForProduction" : 2,
-                                "production" : true
-                            }
-'@ | Set-Content -Path TestDrive:\settings.json
-            return Get-Content -Path TestDrive:\settings.json
+        $productionSettings = 
+        @' 
+            {
+                "sizeOfSector" : 1800,
+                "recorderIndex" : 0,
+                "mediaTypeForProduction" : 2,
+                "production" : true,
+                "noCloseMedia": false,
+                "noEjectMediaAfterWrite" : false
+            }
+'@ | Set-Content -Path TestDrive:\productionSettings.json
+
+        Mock -ModuleName CDInterfaceModule 'Get-Content' {
+            return Get-Content -Path TestDrive:\productionSettings.json
         }
     }
 
@@ -550,23 +591,25 @@ Describe 'CDInterface -writetomedia PRODUCTION Invocation error handling' {
 
 Describe 'CDInterface -getdrivestate (Development mode))' {
     BeforeAll {
-        # Mock the settings file - setting non-production mode
-        Mock -ModuleName CDInterfaceModule Get-Content {
-            $settings = 
-                        @' 
-                            {
-                                "sizeOfSector" : 1800,
-                                "driveDefault" : 0,
-                                "mediaTypeForProduction" : 2,
-                                "production" : false
-                            }
-'@ | Set-Content -Path TestDrive:\settings.json
-            return Get-Content -Path TestDrive:\settings.json
+        $nonProductionSettings = 
+        @' 
+            {
+                "sizeOfSector" : 1800,
+                "recorderIndex" : 0,
+                "mediaTypeForProduction" : 2,
+                "production" : false,
+                "noCloseMedia": false,
+                "noEjectMediaAfterWrite" : false
+            }
+'@ | Set-Content -Path TestDrive:\nonProductionSettings.json
+
+        Mock -ModuleName CDInterfaceModule 'Get-Content' {
+            return Get-Content -Path TestDrive:\nonProductionSettings.json
         }
     }
 
     Context "Normal behaviour for a blank CDR loaded on a system with 1 drive" {
-
+ 
         It 'it should show cd is blank and output 2 lines' {
             # Mock the get Drives object creation
             Mock -ModuleName CDInterfaceModule 'New-Object' {

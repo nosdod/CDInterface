@@ -1,5 +1,9 @@
 function Get-Usage() {
-    Write-Output "Usage - CDInterface [commands|options]"
+    param (
+        [string] $verno
+    )
+    Write-Output "Usage - CDInterface [actions|options]"
+    Write-Output "Version : $verno"
     Write-Output "Examples"
     Write-Output "Write the contents of a directory to current media"
     Write-Output "CDInterface -writetomedia C:\Users\MyUser -cdlabel MyUserBackup"
@@ -20,10 +24,7 @@ function Get-Usage() {
     Write-Output "-------"
     Write-Output "-Verbose - Provide more feedback on script actions"
     Write-Output "-cdlabel <label> - Specify label to apply to media"
-    Write-Output "-noCloseMedia - Do not close the media after writing"
-    Write-Output "-noEjectAfterWrite - Do not eject the media after a write operation"
-    Write-Output "-recorderIndex <index> - Use the specified device (index is obtained from -list)"
-    Write-Output "-mediatyperequired <media type> - Specify the type of media to be used in production mode"
+    Write-Output "-onlysingleline - Suppress 2nd informational output line"
 }
 
 # Respond to the caller
@@ -52,7 +53,7 @@ function Write-Response() {
 }
 
 function Get-Version() {
-    return "1.0.2-DEBUG"
+    return "1.0.3"
 }
 
 function CDInterface() {
@@ -68,13 +69,8 @@ function CDInterface() {
         [switch]$version = $false,
         [string]$writetomedia, 
         # Options
-        [int]$recorderIndex, 
-        [int]$mediaTypeRequired,
-        [switch]$noCloseMedia = $false,
-        [switch]$noEjectMediaAfterWrite = $false,
         [string]$cdlabel,
-        [switch]$onlysingleline = $false,
-        $debuglevel = -1
+        [switch]$onlysingleline = $false
     )
 
     $MediaTypeStrings = @(
@@ -103,25 +99,20 @@ function CDInterface() {
 
     $SettingsObject = Get-Content -Path $PSScriptRoot/CDInterfaceModuleSettings.json | ConvertFrom-Json
 
-    # Constants
-    $sizeOfSector = $settingsObject.sizeofSector
-
-    # Use defaults if not specified on command line
-    if ( -Not $recorderIndex ) {
-        $recorderIndex = $SettingsObject.recorderIndex
-    }
-
-    if ( -Not $mediaTypeRequired ) {
-        $mediaTypeRequired = $SettingsObject.mediaTypeForProduction
-    }
-
-    # Production mode always defined in settings
+    # Configuration options now defined in settings
+    $sizeOfSector = $settingsObject.sizeOfSector
+    $recorderIndex = $SettingsObject.recorderIndex
+    $mediaTypeRequired = $SettingsObject.mediaTypeForProduction
     $production = $SettingsObject.production
+    $noCloseMedia = $SettingsObject.noClosemedia
+    $noEjectMediaAfterWrite = $SettingsObject.noEjectMediaAfterWrite
+
+    $verno = Get-Version
 
     # Check that an Action has been specified
     if ( -Not ( $writetomedia -Or $list -Or $help -Or $version -Or $driveletter -Or $getdrivestate -Or $getmediatype -Or $getmediatypelist -Or $ejecttray) ){
         Write-Response -failure -message "No Action specified"
-        Get-Usage
+        Get-Usage $verno
         return
     }
 
@@ -142,7 +133,7 @@ function CDInterface() {
 
     # Display help page
     if ( $help ) {
-        Get-Usage
+        Get-Usage $verno
         return
     }
 
