@@ -1,6 +1,8 @@
 {
     "sizeOfSector" : 1800,
-    "driveDefault" : 0,
+    "recorderIndex" : 0,
     "mediaTypeForProduction" : 2,
-    "production" : false
+    "production" : true,
+    "noCloseMedia": false,
+    "noEjectMediaAfterWrite" : false
 }

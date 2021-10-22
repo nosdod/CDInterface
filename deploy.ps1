@@ -2,14 +2,24 @@
 
 [CmdletBinding()] param(
     [switch]$clean = $false ,
-    [switch]$cleanonly = $false 
+    [switch]$cleanonly = $false,
+    [switch]$cleanall = $false ,
+    [switch]$cleanallonly = $false 
 )
 
-$ver='1.0.2'
+$ver='1.0.3'
 $dest="$env:ProgramFiles\WindowsPowerShell\Modules\CDInterfaceModule"
 $location="$dest\$ver"
 
-if ( $cleanonly -Or $clean ) {
+if ( $cleanall -Or $cleanallonly) {
+    if (Test-Path -Path $dest) {
+        Remove-Item $dest
+        Write-Output "INFO : $dest deleted"
+    }
+    if ( $cleanallonly ) {
+        return # All done
+    }
+} elseif ( $cleanonly -Or $clean) {
     if (Test-Path -Path $location) {
         Remove-Item $location
         Write-Output "INFO : $location deleted"
