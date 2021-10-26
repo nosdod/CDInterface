@@ -36,24 +36,64 @@ function Write-Response() {
     param (
         [switch] $success = $false,
         [switch] $failure = $false,
+        [switch] $silent = $false,
         [string] $message,
         [string] $response # Mandatory for non-error responses
     )
-    if ( $failure ) {
-        Write-Output "ERROR"
-        if ( -Not $onlysingleline ) {
-            Write-Output $message
-        }
-    } elseif ( $success ){
-        Write-Output $response
-        if ( -Not $onlysingleline ) {
-            Write-Output $message
+
+    # Log Action
+    if ( $success ) {
+        Write-Log -success
+    } else {
+        Write-Log
+    }
+
+    # Generate response
+    if ( -Not $silent ) {
+        if ( $failure ) {
+            Write-Output "ERROR"
+            if ( -Not $onlysingleline ) {
+                Write-Output $message
+            }
+        } elseif ( $success ){
+            Write-Log -success
+            Write-Output $response
+            if ( -Not $onlysingleline ) {
+                Write-Output $message
+            }
         }
     }
 }
 
+# Output a log entry
+#
+# Ouput format is 
+#       <date-time> <user> <success/fail> <command>
+# e.g.  26/10/2021 08:30:07 markd success writetomedia 'Z:\HOME Work\CDInterface'
+function Write-Log() {
+    param (
+        [switch] $success = $false
+    )
+
+    # Get result
+    if ( $success ) {
+        $result = "SUCCESS"
+    } else {
+        $result = "FAIL"
+    }
+
+    # Get current user
+    $user = Get-WMIObject -class Win32_ComputerSystem | Select UserName
+
+    # Get timestamp
+    $timestamp = Get-Date -Format o
+
+    Write-EventLog -LogName "Application" -Source "CDInterface" -EntryType Information -EventID 1 -Message "$($user.UserName) $result $action"
+    Write-Verbose -message "EVENT-LOG $timestamp $user $result $action"
+}
+
 function Get-Version() {
-    return "1.0.3"
+    return "1.0.4"
 }
 
 function CDInterface() {
@@ -116,6 +156,29 @@ function CDInterface() {
         return
     }
 
+    # Remember the requested action for the log
+    if ( $writetomedia ) {
+        $action = "WRITE-TO-MEDIA $writetomedia cdlabel $cdlabel"
+    } elseif ($list) {
+        $action = 'LIST'
+    } elseif ($help) {
+        $action = 'HELP'
+    } elseif ($version) {
+        $action = 'VERSION'
+    } elseif ($driveletter) {
+        $action = 'DRIVE-LETTER'
+    } elseif ($getdrivestate) {
+        $action = 'GET-DRIVE-STATE'
+    } elseif ($getmediatype) {
+        $action = 'GET-MEDIATYPE'
+    } elseif ($getmediatypelist) {
+        $action = 'GET-MEDIATYPE-LIST'
+    } elseif ($ejecttray) {
+        $action = 'EJECT'
+    } else {
+        $action = 'UNKNOWN'
+    }
+
     # -cdlabel is mandatory if -writetomedia is specified
     if ( $writetomedia ) {
         if ( -Not $cdlabel ) {
@@ -134,6 +197,7 @@ function CDInterface() {
     # Display help page
     if ( $help ) {
         Get-Usage $verno
+        Write-Response -success -silent
         return
     }
 
@@ -144,6 +208,7 @@ function CDInterface() {
             Write-Output "$counter $mediaType"
             $counter++
         }
+        Write-Response -success -silent
         return
     }
 
@@ -166,6 +231,7 @@ function CDInterface() {
                 $counter++
             }
         }
+        Write-Response -success -silent
         return
     }
     
