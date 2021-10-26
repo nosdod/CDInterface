@@ -126,36 +126,107 @@ BeforeAll {
     }
 }
 
+Describe 'Write-Log' {
+    It 'Given no parameters, it logs a failure' {
+        InModuleScope CDInterfaceModule {
+
+            Mock Write-EventLog {}
+        
+            Mock Get-WmiObject {
+                return [PSCustomObject]@{
+                    UserName = "TestUser"
+                }
+            }
+
+            Mock Get-Date {
+                return "2021-10-26T13:19:00.7889497+01:00"
+            }
+
+            $wr = Write-Log
+            $wr.Count | Should -Be 0
+            Should -Invoke Get-WmiObject -Times 1 -Exactly
+            Should -Invoke Get-Date -Times 1 -Exactly
+            Should -Invoke Write-EventLog -ParameterFilter {$Message -match "TestUser.*FAIL"}
+        }
+    }
+    It 'Given success, it logs a success' {
+        InModuleScope CDInterfaceModule {
+
+            Mock Write-EventLog {}
+        
+            Mock Get-WmiObject {
+                return [PSCustomObject]@{
+                    UserName = "TestUser"
+                }
+            }
+
+            Mock Get-Date {
+                return "2021-10-26T13:19:00.7889497+01:00"
+            }
+
+            $wr = Write-Log -success
+            $wr.Count | Should -Be 0
+            Should -Invoke  Get-WmiObject -Times 1 -Exactly
+            Should -Invoke  Get-Date -Times 1 -Exactly
+            Should -Invoke Write-EventLog -ParameterFilter {$Message -match "TestUser.*SUCCESS"}
+        }
+    }
+}
+
 Describe 'Write-Response' {
     It 'Given no parameters, it outputs nothing' {
         InModuleScope CDInterfaceModule {
+            Mock Write-Log {}
+        
             $wr = Write-Response
             $wr.Count | Should -Be 0
+            Should -Invoke  Write-Log -Times 1 -Exactly
         }
     }
     It 'Given a bad parameter, it outputs nothing' {
         InModuleScope CDInterfaceModule {
+            Mock Write-Log {}
+        
             $wr = Write-Response -failed
             $wr.Count | Should -Be 0
+            Should -Invoke  Write-Log -Times 1 -Exactly
+        }
+    }
+    It 'With silent, it outputs nothing' {
+        InModuleScope CDInterfaceModule {
+            Mock Write-Log {}
+        
+            $wr = Write-Response -success -silent
+            $wr.Count | Should -Be 0
+            Should -Invoke  Write-Log -Times 1 -Exactly
         }
     }
     It 'For an error response, it outputs 2 lines' {
         InModuleScope CDInterfaceModule {
+            Mock Write-Log {}
+        
             $wr = Write-Response -failure -message "Test output"
             $wr.Count | Should -Be 2
             $wr[0] | Should -Be "ERROR"
+            Should -Invoke  Write-Log -Times 1 -Exactly
         }
     }
     It 'For an error response, first line should be ERROR' {
         InModuleScope CDInterfaceModule {
+            Mock Write-Log {}
+        
             $wr = Write-Response -failure -message "Test output"
             $wr[0] | Should -Be "ERROR"
+            Should -Invoke  Write-Log -Times 1 -Exactly
         }
     }
     It 'For an error response, second line should be the given message' {
         InModuleScope CDInterfaceModule {
+            Mock Write-Log {}
+        
             $wr = Write-Response -failure -message "Test output"
             $wr[1] | Should -Be "Test output"
+            Should -Invoke Write-Log -Times 1 -Exactly
         }
     }
 }
@@ -195,11 +266,14 @@ Describe 'CDInterface' {
         Mock -ModuleName CDInterfaceModule 'Get-Content' {
             return Get-Content -Path TestDrive:\productionSettings.json
         }
+        Mock -ModuleName CDInterfaceModule Write-Log {}
     }
 
-    It 'Given no parameters, it outputs usage text' {
+    It 'Given no parameters, it outputs an error and usage text' {
         $cdi = CDInterface
-        $cdi.Count | Should -Not -Be 0
+        $cdi.Count | Should -BeGreaterThan 20
+        $cdi[0] | Should -Be "ERROR"
+        $cdi[2] | Should -Match "Usage"
     }
 }
 
@@ -220,6 +294,7 @@ Describe 'CDInterface -list' {
         Mock -ModuleName CDInterfaceModule 'Get-Content' {
             return Get-Content -Path TestDrive:\productionSettings.json
         }
+        Mock -ModuleName CDInterfaceModule Write-Log {}
     }
 
     Context "A system with 2 drives" {
@@ -284,6 +359,8 @@ Describe 'CDInterface -getdrivestate PRODUCTION' {
         Mock -ModuleName CDInterfaceModule Get-Content {
             return Get-Content -Path TestDrive:\productionSettings.json
         }
+
+        Mock -ModuleName CDInterfaceModule Write-Log {}
     }
 
     Context "Normal behaviour for a blank CDR loaded in production on a system with 1 drive" {
@@ -328,6 +405,8 @@ Describe 'CDInterface -getdrivestate PRODUCTION' {
                 New-Object 'fake_IMAPI2_MsftDiscFormat2Data_CDR_NOT_BLANK' 
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscFormat2Data" }
 
+            Mock -ModuleName CDInterfaceModule 'Write-Log' {}
+
             $cdi = CDInterface -getdrivestate
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "NON_WRITEABLE_DISC"
@@ -350,6 +429,8 @@ Describe 'CDInterface -getdrivestate PRODUCTION' {
             Mock -ModuleName CDInterfaceModule 'New-Object' { 
                 New-Object 'fake_IMAPI2_MsftDiscFormat2Data_CDRW' 
             } -ParameterFilter { $ComObject -eq "IMAPI2.MsftDiscFormat2Data" }
+
+            Mock -ModuleName CDInterfaceModule 'Write-Log' {}
 
             $cdi = CDInterface -getdrivestate
             $cdi.Count | Should -Be 2
@@ -375,6 +456,9 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> PRODUCTION' {
         Mock -ModuleName CDInterfaceModule 'Get-Content' {
             return Get-Content -Path TestDrive:\productionSettings.json
         }
+
+        Mock -ModuleName CDInterfaceModule 'Write-Log' {}
+
     }
 
     Context "Normal behaviour for a blank CDR loaded in production on a system with 1 drive" {
@@ -428,6 +512,9 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> -production -verbose
         Mock -ModuleName CDInterfaceModule Get-Content {
             return Get-Content -Path TestDrive:\productionSettings.json
         }
+
+        Mock -ModuleName CDInterfaceModule 'Write-Log' {}
+
     }
 
     Context "Verbose behaviour for a blank CDR loaded in production on a system with 1 drive" {
@@ -482,6 +569,9 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> PRODUCTION error pat
         Mock -ModuleName CDInterfaceModule 'Get-Content' {
             return Get-Content -Path TestDrive:\productionSettings.json
         }
+
+        Mock -ModuleName CDInterfaceModule 'Write-Log' {}
+
     }
 
     Context "Error behaviour CDR is not blank CDR in production on a system with 1 drive" {
@@ -540,6 +630,8 @@ Describe 'CDInterface -writetomedia <path> -cdlabel <label> PRODUCTION error pat
                 Throw
             }
 
+            Mock -ModuleName CDInterfaceModule 'Write-Log' {}
+
             $cdi = CDInterface -writetomedia "Invalid" -cdlabel "MyBackup"
             $cdi.Count | Should -Be 2
             $cdi[0] | Should -Be "ERROR"
@@ -565,6 +657,9 @@ Describe 'CDInterface -writetomedia PRODUCTION Invocation error handling' {
         Mock -ModuleName CDInterfaceModule 'Get-Content' {
             return Get-Content -Path TestDrive:\productionSettings.json
         }
+
+        Mock -ModuleName CDInterfaceModule 'Write-Log' {}
+
     }
 
     Context "Error behaviour for missing cdlabel parameter in production on a system with 1 drive" {
@@ -606,6 +701,9 @@ Describe 'CDInterface -getdrivestate (Development mode))' {
         Mock -ModuleName CDInterfaceModule 'Get-Content' {
             return Get-Content -Path TestDrive:\nonProductionSettings.json
         }
+
+        Mock -ModuleName CDInterfaceModule 'Write-Log' {}
+
     }
 
     Context "Normal behaviour for a blank CDR loaded on a system with 1 drive" {

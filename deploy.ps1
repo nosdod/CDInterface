@@ -7,7 +7,7 @@
     [switch]$cleanallonly = $false 
 )
 
-$ver='1.0.3'
+$ver='1.0.4'
 $dest="$env:ProgramFiles\WindowsPowerShell\Modules\CDInterfaceModule"
 $location="$dest\$ver"
 
@@ -35,6 +35,17 @@ if (Test-Path -Path $location) {
 } elseif ( -Not { Test-Path -Path $dest } ) {
     mkdir $env:ProgramFiles\WindowsPowerShell\Modules\CDInterfaceModule
 }
+
+# Create the eventlog, if it doesn't exist
+try {
+    $eventlog = New-EventLog -LogName Application -Source "CDInterface" -ErrorAction Stop
+    Write-Output "CDInterface Application log created"
+} catch {
+    Write-Output "CDInterface Application log already exists"
+}
+
+$user = Get-WMIObject -class Win32_ComputerSystem | Select UserName
+Write-EventLog -LogName "Application" -Source "CDInterface" -EntryType Information -EventID 2 -Message "CDInterface $ver Deployed by $($user.UserName)"
 
 mkdir $location
 Copy-Item .\CDInterfaceModule.psm1 $location
