@@ -83,7 +83,7 @@ function Write-Log() {
     }
 
     # Get current user
-    $user = Get-WMIObject -class Win32_ComputerSystem | Select UserName
+    $user = Get-WMIObject -class Win32_ComputerSystem | Select-Object UserName
 
     # Get timestamp
     $timestamp = Get-Date -Format o
@@ -110,7 +110,9 @@ function CDInterface() {
         [string]$writetomedia, 
         # Options
         [string]$cdlabel,
-        [switch]$onlysingleline = $false
+        [switch]$onlysingleline = $false,
+        [switch]$simulateSingleDrive = $false,
+        [switch]$simulateTwoDrives = $false
     )
 
     $MediaTypeStrings = @(
@@ -212,7 +214,80 @@ function CDInterface() {
         return
     }
 
-    $dm = New-Object -ComObject "IMAPI2.MsftDiscMaster2"
+    # When we're simulating drives, we create them as objects which mimic how the real objects behave
+    $simulatedDrive0 = [PSCustomObject]@{
+        Name            = 'Drive 0'
+        VendorId        = 'Samsung'
+        ProductId       = 'DVDWriter'
+        VolumePathNames = @( "D:\" )
+    }
+    $simulatedDrive1 = [PSCustomObject]@{
+        Name            = 'Drive 0'
+        VendorId        = 'LG'
+        ProductId       = 'CDWriter'
+        VolumePathNames = @( "E:\" )
+    }
+    # Simulate exclusive access methods of the recorder objects
+    $ReturnTrueBlock = { return $true }
+    $memberParam = @{
+        MemberType = "ScriptMethod"
+        InputObject = $simulatedDrive0
+        Name = "AcquireExclusiveAccess"
+        Value = $ReturnTrueBlock
+    }
+    Add-Member @memberParam
+
+    $memberParam2 = @{
+        MemberType = "ScriptMethod"
+        InputObject = $simulatedDrive0
+        Name = "ReleaseExclusiveAccess"
+        Value = $ReturnTrueBlock
+    }
+    Add-Member @memberParam2
+
+    $memberParam3 = @{
+        MemberType = "ScriptMethod"
+        InputObject = $simulatedDrive1
+        Name = "AcquireExclusiveAccess"
+        Value = $ReturnTrueBlock
+    }
+    Add-Member @memberParam3
+
+    $memberParam4 = @{
+        MemberType = "ScriptMethod"
+        InputObject = $simulatedDrive1
+        Name = "ReleaseExclusiveAccess"
+        Value = $ReturnTrueBlock
+    }
+    Add-Member @memberParam4
+
+    # Simulate eject media methods of the recorder objects
+    $member1 = @{
+        MemberType = "ScriptMethod"
+        InputObject = $simulatedDrive0
+        Name = "EjectMedia"
+        Value = $ReturnTrueBlock
+    }
+    Add-Member @member1
+
+    $member2 = @{
+        MemberType = "ScriptMethod"
+        InputObject = $simulatedDrive1
+        Name = "EjectMedia"
+        Value = $ReturnTrueBlock
+    }
+    Add-Member @member2
+
+    if ( $simulateSingleDrive ) {
+        $dm = @( $simulatedDrive0 )
+        $simulatingDrives = $true
+    } elseif ( $simulateTwoDrives ) {
+        $dm = @( $simulatedDrive0, $simulatedDrive1 )
+        $simulatingDrives = $true
+    } else {
+        $dm = New-Object -ComObject "IMAPI2.MsftDiscMaster2"
+        $simulatingDrives = $false
+    }
 
     # Display available recorders
     if ( $list ) {
@@ -224,8 +299,12 @@ function CDInterface() {
         if ( $dm.Count -ge 1 ) {
             $counter = 0
             foreach ($writer in $dm) {
-                $recorder = New-Object -ComObject "IMAPI2.MsftDiscRecorder2"
-                $recorder.InitializeDiscRecorder($dm.Item($counter))
+                if ( $simulatingDrives ) {
+                    $recorder = $writer
+                } else {
+                    $recorder = New-Object -ComObject "IMAPI2.MsftDiscRecorder2"
+                    $recorder.InitializeDiscRecorder($dm.Item($counter))
+                }
                 Write-Output "$counter Device - Vendor ID = $($recorder.VendorId), Product ID = $($recorder.ProductId) mounted on $($recorder.VolumePathNames)"
                 Write-Verbose "Full description $writer"
                 $counter++
@@ -248,15 +327,21 @@ function CDInterface() {
     }
     
     # Initialize the recorder:
-    $recorder = New-Object -ComObject "IMAPI2.MsftDiscRecorder2"
+    if ( $simulatingDrives ) {
+        $recorder = $dm[$recorderIndex];
+    } else {
+        $recorder = New-Object -ComObject "IMAPI2.MsftDiscRecorder2"
 
-    $recorder.InitializeDiscRecorder($dm.Item($recorderIndex))
+        $recorder.InitializeDiscRecorder($dm.Item($recorderIndex))
+    }
 
     Write-Verbose -Message "Initialised recorder - Vendor ID $($recorder.VendorId) Product ID $($recorder.ProductId) on $($recorder.VolumePathNames)"
 
     if ( $ejecttray ) {
         try {
-            $recorder.EjectMedia()
+            if ( !$simulatingDrives ) {
+                $recorder.EjectMedia()
+            }
             Write-Response -success -message "Media ejected" -response "SUCCESS"
         } catch {
             Write-Response -failure -message "Media eject failed"
@@ -277,10 +362,51 @@ function CDInterface() {
     }
 
     # Use formatter to permform media actions:
-    $df2d = New-Object -ComObject IMAPI2.MsftDiscFormat2Data
-    $df2d.Recorder = $recorder
-    $df2d.ClientName = "CDInterface"
-    $df2d.ForceMediaToBeClosed = $forceMediaToBeClosed
+    if ( $simulatingDrives ) {
+        $df2d = [PSCustomObject]@{
+            Recorder                 = $recorder
+            ClientName               = 'CDInterfaceSimulator'
+            ForceMediaToBeClosed     = $forceMediaToBeClosed
+            # CDR media loaded
+            CurrentPhysicalMediaType = 2
+            # Blank media loaded
+            MediaHeuristicallyBlank  = $true
+            # Total sectors on media (~600MB)
+            TotalSectorsOnMedia      = 360000
+        }
+        # Simulate methods of the df2d object
+        $IsCurrentMediaSupportedBlock = { return $true }
+        $memberParam5 = @{
+            MemberType = "ScriptMethod"
+            InputObject = $df2d
+            Name = "IsCurrentMediaSupported"
+            Value = $IsCurrentMediaSupportedBlock
+        }
+        Add-Member @memberParam5
+
+        $WriteBlock = {
+            $updateIntervalSeconds = 5
+            $writeDurationSeconds = 600
+            for ( $i=0; $i -lt $writeDurationSeconds; $i+=$updateIntervalSeconds) {
+                Write-Verbose "Write in progress - $i of $writeDurationSeconds Secs"
+                Start-Sleep -Seconds $updateIntervalSeconds 
+            }
+            return $true 
+        }
+        $memberParam6 = @{
+            MemberType = "ScriptMethod"
+            InputObject = $df2d
+            Name = "Write"
+            Value = $WriteBlock
+        }
+        Add-Member @memberParam6
+
+    } else {
+        $df2d = New-Object -ComObject IMAPI2.MsftDiscFormat2Data
+        $df2d.Recorder = $recorder
+        $df2d.ClientName = "CDInterface"
+        $df2d.ForceMediaToBeClosed = $forceMediaToBeClosed
+    }
 
     # What type of media is in the drive ?
     if ( $getmediatype ) {
@@ -326,6 +452,7 @@ function CDInterface() {
         if ( $getdrivestate ) {
             Write-Response -success -message "Blank Media Loaded" -response "BLANK_CD"
             Write-Verbose -Message "PhysicallyBlank = $($df2d.MediaPhysicallyBlank)"
+            Write-Verbose -Message "TotalSectorsOnMedia = $($df2d.TotalSectorsOnMedia)"
             return
         }
     } else {
@@ -367,6 +494,8 @@ function CDInterface() {
         Write-Verbose -Message "Size of files in $writetomedia is $("{0:N2} MB" -f ($sizeOfFilesToWrite.Sum/1MB))"
 
         $spaceOnMedia = $df2d.TotalSectorsOnMedia * $sizeOfSector
+        Write-Verbose -Message "Size of media is $("{0:N2} MB" -f ($spaceOnMedia/1MB))"
+
         if ( $sizeOfFilesToWrite.Sum -gt $spaceOnMedia ) {
             Write-Response -failure -message "The path $writetomedia contains too much data for this media : $("{0:N2} MB" -f ($sizeOfFilesToWrite.Sum/1MB))"
             return

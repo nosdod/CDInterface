@@ -2,7 +2,7 @@
     "sizeOfSector" : 1800,
     "recorderIndex" : 0,
     "mediaTypeForProduction" : 2,
-    "production" : true,
+    "production" : false,
     "noCloseMedia": false,
     "noEjectMediaAfterWrite" : false
 }
